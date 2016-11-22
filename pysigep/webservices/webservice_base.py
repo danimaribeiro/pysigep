@@ -25,9 +25,31 @@
 #
 ###############################################################################
 
+import unicodedata
+from lxml import etree
+
+from lxml import objectify
+
 import xml.etree.cElementTree as Et
 import requests
 from pysigep import sigep_exceptions
+
+
+def sanitize_response(response):
+    response = unicode(response)
+    response = unicodedata.normalize('NFKD', response).encode('ascii',
+                                                              'ignore')
+
+    tree = etree.fromstring(response)
+    # Remove namespaces inuteis na resposta
+    for elem in tree.getiterator():
+        if not hasattr(elem.tag, 'find'):
+            continue
+        i = elem.tag.find('}')
+        if i >= 0:
+            elem.tag = elem.tag[i+1:]
+    objectify.deannotate(tree, cleanup_namespaces=True)
+    return objectify.fromstring(etree.tostring(tree))
 
 
 class WebserviceBase(object):
@@ -42,22 +64,15 @@ class WebserviceBase(object):
     def request(self, obj_param, ssl_verify=False):
 
         try:
-            resposta = requests.post(self.url, data=obj_param.get_data(),
-                                     headers={'Content-type': 'text/xml'},
-                                     verify=ssl_verify)
-
+            resposta = requests.post(
+                self.url, data=obj_param.get_data(),
+                headers={'Content-type': 'text/xml; charset=utf-8;'},
+                verify=ssl_verify)
             if not resposta.ok:
-                msg = self.parse_error(resposta.text.encode('utf8'))
+                msg = self.parse_error(resposta.text)
                 raise sigep_exceptions.ErroValidacaoXML(msg)
 
-            # Criamos um response dinamicamente para cada tipo de classe
-            response = obj_param.response_class_ref()
-
-            response.status_code = resposta.status_code
-            response.encoding = resposta.encoding
-            response.xml = resposta.text.encode('utf8')
-            response.body_request = resposta.request.body
-            return response
+            return sanitize_response(resposta.text)
 
         except requests.ConnectionError as exc:
             raise sigep_exceptions.ErroConexaoComServidor(exc.message)

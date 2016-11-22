@@ -24,3 +24,12 @@
 # SOFTWARE.
 #
 ###############################################################################
+
+from .webservice_base import WebserviceBase
+
+
+class WebserviceFrete(WebserviceBase):
+
+    def __init__(self):
+        super(WebserviceFrete, self).__init__(
+            'http://ws.correios.com.br/calculador/CalcPrecoPrazo.asmx?WSDL')
